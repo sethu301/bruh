@@ -86,11 +86,11 @@ async def watch(ctx, *, channel_name=None):
 @bot.command()
 async def radio(ctx, *, station=None):
     radio_stations = {
-        "radiomirchi": "https://www.youtube.com/watch?v=0u7YFG1xgjs",
-        "clubfm": "https://www.youtube.com/watch?v=G_4D8dNmh3c",
-        "radiocity": "https://www.youtube.com/watch?v=wD3UudcAMsQ",
-        "redfm": "https://www.youtube.com/watch?v=8Mw26FFtGEM",
-        "radiomango": "https://www.youtube.com/watch?v=WBoNfi0XKqU"
+        "radiomirchi": "https://www.youtube.com/watch?v=Lamuk5Jc2Cc",
+        "clubfm": "https://www.youtube.com/watch?v=T15lWGwu994",
+        "radiocity": "https://www.youtube.com/watch?v=s7i3SVbUdzA",
+        "redfm": "https://www.youtube.com/watch?v=4yR5_RcRZ7k",
+        "radiomango": "https://www.youtube.com/watch?v=xuohrKlWeJ8"
     }
 
     if station is None or station.lower() not in radio_stations:
