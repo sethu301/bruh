@@ -169,12 +169,12 @@ async def commands(ctx):
 🎙️ `!!join` → Join your voice channel
 👋 `!!leave` → Leave the voice channel
 📺 `!!watch <channel>` → Watch Malayalam TV live
-📻 `!!radio <station>` → Listen to Malayalam FM Radio
+📻 `!!radio <station>` → Listen to Malayalam FM Radio (might not work)
 📝 `!!channels` → Show all available TV channels
 🎶 `!!stations` → Show all available FM stations
 💡 `!!commands` → Show this stylish help panel
 ━━━━━━━━━━━━━━━━━━━━━━
-Enjoy! 😎
+Enjoy! 😎 made by Sethu, I do not associate with NIGGERS! FUCK NIGGERS!
     """
     await ctx.send(help_text)
 
