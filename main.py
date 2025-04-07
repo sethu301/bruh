@@ -174,7 +174,7 @@ async def commands(ctx):
 🎶 `!!stations` → Show all available FM stations
 💡 `!!commands` → Show this stylish help panel
 ━━━━━━━━━━━━━━━━━━━━━━
-Enjoy! 😎 made by Sethu, I do not associate with NIGGERS! FUCK NIGGERS!
+Enjoy! 😎 made by Sethu, I do not associate with **NIGGERS! FUCK NIGGERS!** <:shoot:853875210452992000> 
     """
     await ctx.send(help_text)
 
