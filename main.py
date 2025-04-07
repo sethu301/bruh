@@ -33,6 +33,17 @@ async def leave(ctx):
     else:
         await ctx.send("❌ I'm not connected to any voice channel.")
 
+def get_audio_url(url):
+    ydl_opts = {
+        'format': 'bestaudio/best',
+        'quiet': True,
+        'noplaylist': True,
+        'cookiefile': 'cookies.txt'  # <-- Added cookies.txt support
+    }
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(url, download=False)
+        return info['url']
+
 @bot.command()
 async def watch(ctx, *, channel_name=None):
     youtube_streams = {
@@ -52,17 +63,7 @@ async def watch(ctx, *, channel_name=None):
         return
 
     url = youtube_streams[channel_name.lower()]
-
-    ydl_opts = {
-        'format': 'bestaudio/best',
-        'quiet': True,
-        'noplaylist': True,
-        'extract_flat': 'in_playlist',
-    }
-
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url, download=False)
-        audio_url = info['url']
+    audio_url = get_audio_url(url)
 
     if ctx.voice_client is None:
         if ctx.author.voice:
@@ -97,17 +98,7 @@ async def radio(ctx, *, station=None):
         return
 
     url = radio_stations[station.lower()]
-
-    ydl_opts = {
-        'format': 'bestaudio/best',
-        'quiet': True,
-        'noplaylist': True,
-        'extract_flat': 'in_playlist',
-    }
-
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url, download=False)
-        audio_url = info['url']
+    audio_url = get_audio_url(url)
 
     if ctx.voice_client is None:
         if ctx.author.voice:
@@ -166,15 +157,15 @@ async def commands(ctx):
     help_text = """
 ✨✨✨ **BOT COMMANDS PANEL** ✨✨✨
 ━━━━━━━━━━━━━━━━━━━━━━
-🎙️ `!!join` → Join your voice channel
-👋 `!!leave` → Leave the voice channel
-📺 `!!watch <channel>` → Watch Malayalam TV live
-📻 `!!radio <station>` → Listen to Malayalam FM Radio (might not work)
-📝 `!!channels` → Show all available TV channels
-🎶 `!!stations` → Show all available FM stations
-💡 `!!commands` → Show this stylish help panel
+🎙️ `!!join` → Join your voice channel  
+👋 `!!leave` → Leave the voice channel  
+📺 `!!watch <channel>` → Watch Malayalam TV live  
+📻 `!!radio <station>` → Listen to Malayalam FM Radio  
+📝 `!!channels` → Show all available TV channels  
+🎶 `!!stations` → Show all available FM stations  
+💡 `!!commands` → Show this stylish help panel  
 ━━━━━━━━━━━━━━━━━━━━━━
-Enjoy! 😎 made by Sethu, I do not associate with **NIGGERS! FUCK NIGGERS!** <:shoot:853875210452992000> 
+Enjoy! 😎 Made by Sethu. I do not associate with **NIGGERS!! FUCK NIGGERS!!**
     """
     await ctx.send(help_text)
 
