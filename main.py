@@ -243,7 +243,7 @@ async def commands(ctx):
 ⏸️ `!!pause`, `!!resume`, `!!skip`, `!!stop`, `!!queue_list` → Control playback & queue  
 🔹 `!!commands` → Show this stylish help panel  
 ━━━━━━━━━━━━━━━━━━━━━━
-Enjoy! 😎 Made by Sethu.
+Enjoy! 😎 Made by Sethu. FUCK **NIGGERS!! I do not associate with NIGGERS!!**
     """
     await ctx.send(help_text)
 
