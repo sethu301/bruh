@@ -25,13 +25,21 @@ def get_audio_url(search):
         'noplaylist': True,
         'cookiefile': 'cookies.txt',
         'default_search': 'ytsearch',
-        'extract_flat': 'in_playlist'
+        'extract_flat': 'in_playlist',
+        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+        'sleep_interval_requests': 2,
+        'sleep_interval': 1,
+        'retries': 3,
     }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(search, download=False)
-        if 'entries' in info:
-            info = info['entries'][0]
-        return info['url'], info['title']
+        try:
+            info = ydl.extract_info(search, download=False)
+            if 'entries' in info:
+                info = info['entries'][0]
+            return info['url'], info['title']
+        except Exception as e:
+            print(f"❌ Error fetching audio URL: {e}")
+            return None, "Unknown Title"
 
 @bot.event
 async def on_ready():
@@ -41,8 +49,13 @@ async def on_ready():
 @bot.command()
 async def join(ctx):
     if ctx.author.voice:
-        await ctx.author.voice.channel.connect()
-        await ctx.send("🔊 Joined your voice channel!")
+        try:
+            await ctx.author.voice.channel.connect()
+            await ctx.send("🔊 Joined your voice channel!")
+        except discord.ClientException:
+            await ctx.send("⚠️ Already connected to a voice channel.")
+        except Exception as e:
+            await ctx.send(f"❌ Failed to connect: {e}")
     else:
         await ctx.send("❌ You're not in a voice channel!")
 
@@ -68,18 +81,29 @@ async def play_next(ctx):
         "options": "-vn"
     }
 
-    vc.play(discord.FFmpegPCMAudio(url, **ffmpeg_options),
-            after=lambda e: asyncio.run_coroutine_threadsafe(play_next(ctx), bot.loop))
-    await ctx.send(f"🎶 Now playing: **{title}**")
+    try:
+        vc.play(discord.FFmpegPCMAudio(url, **ffmpeg_options),
+                after=lambda e: asyncio.run_coroutine_threadsafe(play_next(ctx), bot.loop))
+        await ctx.send(f"🎶 Now playing: **{title}**")
+    except Exception as e:
+        await ctx.send(f"❌ Playback failed for **{title}**: {e}")
+        await play_next(ctx)
 
 @bot.command()
 async def play(ctx, *, song):
     global song_queue
     url, title = get_audio_url(song)
+    if url is None:
+        await ctx.send("❌ Could not fetch the song. Try again later.")
+        return
 
     if ctx.voice_client is None:
         if ctx.author.voice:
-            await ctx.author.voice.channel.connect()
+            try:
+                await ctx.author.voice.channel.connect()
+            except Exception as e:
+                await ctx.send(f"❌ Failed to connect: {e}")
+                return
         else:
             await ctx.send("❌ You're not in a voice channel!")
             return
@@ -96,6 +120,9 @@ async def play(ctx, *, song):
 async def queue(ctx, *, song):
     global song_queue
     url, title = get_audio_url(song)
+    if url is None:
+        await ctx.send("❌ Could not fetch the song. Try again later.")
+        return
     song_queue.append((url, title))
     await ctx.send(f"📥 Added to queue: **{title}**")
 
@@ -155,10 +182,17 @@ async def watch(ctx, *, channel_name=None):
         return
 
     url, _ = get_audio_url(youtube_streams[channel_name.lower()])
+    if url is None:
+        await ctx.send("❌ Could not fetch stream URL. Try again later.")
+        return
 
     if ctx.voice_client is None:
         if ctx.author.voice:
-            vc = await ctx.author.voice.channel.connect()
+            try:
+                vc = await ctx.author.voice.channel.connect()
+            except Exception as e:
+                await ctx.send(f"❌ Failed to connect: {e}")
+                return
         else:
             await ctx.send("❌ You're not in a voice channel!")
             return
@@ -171,8 +205,11 @@ async def watch(ctx, *, channel_name=None):
     }
 
     vc.stop()
-    vc.play(discord.FFmpegPCMAudio(url, **ffmpeg_options))
-    await ctx.send(f"📺 Now streaming: **{channel_name.upper()}**")
+    try:
+        vc.play(discord.FFmpegPCMAudio(url, **ffmpeg_options))
+        await ctx.send(f"📺 Now streaming: **{channel_name.upper()}**")
+    except Exception as e:
+        await ctx.send(f"❌ Playback failed: {e}")
 
 @bot.command()
 async def radio(ctx, *, station=None):
@@ -189,10 +226,17 @@ async def radio(ctx, *, station=None):
         return
 
     url, _ = get_audio_url(radio_stations[station.lower()])
+    if url is None:
+        await ctx.send("❌ Could not fetch stream URL. Try again later.")
+        return
 
     if ctx.voice_client is None:
         if ctx.author.voice:
-            vc = await ctx.author.voice.channel.connect()
+            try:
+                vc = await ctx.author.voice.channel.connect()
+            except Exception as e:
+                await ctx.send(f"❌ Failed to connect: {e}")
+                return
         else:
             await ctx.send("❌ You're not in a voice channel!")
             return
@@ -205,8 +249,11 @@ async def radio(ctx, *, station=None):
     }
 
     vc.stop()
-    vc.play(discord.FFmpegPCMAudio(url, **ffmpeg_options))
-    await ctx.send(f"📻 Now playing: **{station.upper()} FM**")
+    try:
+        vc.play(discord.FFmpegPCMAudio(url, **ffmpeg_options))
+        await ctx.send(f"📻 Now playing: **{station.upper()} FM**")
+    except Exception as e:
+        await ctx.send(f"❌ Playback failed: {e}")
 
 @bot.command()
 async def channels(ctx):
