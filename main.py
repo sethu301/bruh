@@ -5,6 +5,7 @@ import os
 from keep_alive import keep_alive
 import yt_dlp
 import asyncio
+import time
 from collections import deque
 
 intents = discord.Intents.default()
@@ -17,6 +18,7 @@ bot = commands.Bot(command_prefix="!!", intents=intents)
 song_queue = deque()
 auto_disconnect_enabled = True
 idle_disconnect_delay = 300  # 5 minutes
+stream_cache = {}
 
 def get_audio_url(search):
     ydl_opts = {
@@ -28,7 +30,9 @@ def get_audio_url(search):
         'extract_flat': 'in_playlist',
         'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
         'sleep_interval_requests': 2,
-        'sleep_interval': 1,
+        'sleep_interval': 2,
+        'max_sleep_interval': 4,
+        'ratelimit': 512000,
         'retries': 3,
     }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -40,6 +44,15 @@ def get_audio_url(search):
         except Exception as e:
             print(f"❌ Error fetching audio URL: {e}")
             return None, "Unknown Title"
+
+def get_cached_audio_url(name, search):
+    now = time.time()
+    if name in stream_cache and now - stream_cache[name]['time'] < 300:
+        return stream_cache[name]['url'], stream_cache[name]['title']
+    url, title = get_audio_url(search)
+    if url:
+        stream_cache[name] = {'url': url, 'title': title, 'time': now}
+    return url, title
 
 @bot.event
 async def on_ready():
@@ -135,6 +148,34 @@ async def showqueue(ctx):
         await ctx.send(f"🎶 **Upcoming Songs:**\n{queue_list}")
 
 @bot.command()
+async def pause(ctx):
+    vc = ctx.voice_client
+    if vc and vc.is_playing():
+        vc.pause()
+        await ctx.send("⏸️ Paused.")
+
+@bot.command()
+async def resume(ctx):
+    vc = ctx.voice_client
+    if vc and vc.is_paused():
+        vc.resume()
+        await ctx.send("▶️ Resumed.")
+
+@bot.command()
+async def stop(ctx):
+    vc = ctx.voice_client
+    if vc and (vc.is_playing() or vc.is_paused()):
+        vc.stop()
+        await ctx.send("⏹️ Stopped.")
+
+@bot.command()
+async def skip(ctx):
+    vc = ctx.voice_client
+    if vc and vc.is_playing():
+        vc.stop()
+        await ctx.send("⏭️ Skipped.")
+
+@bot.command()
 async def persist(ctx):
     global auto_disconnect_enabled
     auto_disconnect_enabled = False
@@ -150,14 +191,12 @@ async def autopilot(ctx):
 async def check_idle():
     if not auto_disconnect_enabled:
         return
-
     for vc in bot.voice_clients:
         if not vc.is_playing() and not song_queue:
             if hasattr(vc, 'idle_counter'):
                 vc.idle_counter += 60
             else:
                 vc.idle_counter = 60
-
             if vc.idle_counter >= idle_disconnect_delay:
                 await vc.disconnect()
         else:
@@ -176,16 +215,13 @@ async def watch(ctx, *, channel_name=None):
         "kairali news": "https://www.youtube.com/watch?v=wq0ecjkN3G8",
         "mathrubhumi news": "https://www.youtube.com/watch?v=YGEgelAiUf0"
     }
-
     if channel_name is None or channel_name.lower() not in youtube_streams:
         await ctx.send("❗ Please provide a valid channel name. Use `!!channels` to see available channels.")
         return
-
-    url, _ = get_audio_url(youtube_streams[channel_name.lower()])
+    url, title = get_cached_audio_url(channel_name.lower(), youtube_streams[channel_name.lower()])
     if url is None:
         await ctx.send("❌ Could not fetch stream URL. Try again later.")
         return
-
     if ctx.voice_client is None:
         if ctx.author.voice:
             try:
@@ -198,12 +234,10 @@ async def watch(ctx, *, channel_name=None):
             return
     else:
         vc = ctx.voice_client
-
     ffmpeg_options = {
         "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
         "options": "-vn"
     }
-
     vc.stop()
     try:
         vc.play(discord.FFmpegPCMAudio(url, **ffmpeg_options))
@@ -220,16 +254,13 @@ async def radio(ctx, *, station=None):
         "redfm": "https://www.youtube.com/watch?v=4yR5_RcRZ7k",
         "radiomango": "https://www.youtube.com/watch?v=xuohrKlWeJ8"
     }
-
     if station is None or station.lower() not in radio_stations:
         await ctx.send("❗ Please provide a valid radio station. Use `!!stations` to see the list.")
         return
-
-    url, _ = get_audio_url(radio_stations[station.lower()])
+    url, title = get_cached_audio_url(station.lower(), radio_stations[station.lower()])
     if url is None:
         await ctx.send("❌ Could not fetch stream URL. Try again later.")
         return
-
     if ctx.voice_client is None:
         if ctx.author.voice:
             try:
@@ -242,12 +273,10 @@ async def radio(ctx, *, station=None):
             return
     else:
         vc = ctx.voice_client
-
     ffmpeg_options = {
         "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
         "options": "-vn"
     }
-
     vc.stop()
     try:
         vc.play(discord.FFmpegPCMAudio(url, **ffmpeg_options))
@@ -257,58 +286,36 @@ async def radio(ctx, *, station=None):
 
 @bot.command()
 async def channels(ctx):
-    fancy_channel_list = """
-📺 **Available Malayalam TV Channels** 📺
-━━━━━━━━━━━━━━━━━━━━━━
-🔹 asianet news
-🔹 news 18 kerala
-🔹 manorama news
-🔹 janam tv
-🔹 mediaone news
-🔹 24 news
-🔹 reporter news
-🔹 kairali news
-🔹 mathrubhumi news
-━━━━━━━━━━━━━━━━━━━━━━
-Use `!!watch <channel>` to stream!
-    """
-    await ctx.send(fancy_channel_list)
+    await ctx.send("""📺 **Available Malayalam TV Channels** 📺\n━━━━━━━━━━━━━━━━━━━━━━\n🔹 asianet news\n🔹 news 18 kerala\n🔹 manorama news\n🔹 janam tv\n🔹 mediaone news\n🔹 24 news\n🔹 reporter news\n🔹 kairali news\n🔹 mathrubhumi news\n━━━━━━━━━━━━━━━━━━━━━━\nUse `!!watch <channel>` to stream!""")
 
 @bot.command()
 async def stations(ctx):
-    fancy_station_list = """
-🎧 **Available Malayalam FM Stations** 🎧
-━━━━━━━━━━━━━━━━━━━━━━
-🎵 radiomirchi
-🎵 clubfm
-🎵 radiocity
-🎵 redfm
-🎵 radiomango
-━━━━━━━━━━━━━━━━━━━━━━
-Use `!!radio <station>` to play!
-    """
-    await ctx.send(fancy_station_list)
+    await ctx.send("""🎧 **Available Malayalam FM Stations** 🎧\n━━━━━━━━━━━━━━━━━━━━━━\n🎵 radiomirchi\n🎵 clubfm\n🎵 radiocity\n🎵 redfm\n🎵 radiomango\n━━━━━━━━━━━━━━━━━━━━━━\nUse `!!radio <station>` to play!""")
 
 @bot.command()
 async def commands(ctx):
     help_text = """
 ✨✨✨ **BOT COMMANDS PANEL** ✨✨✨
 ━━━━━━━━━━━━━━━━━━━━━━
-🎙️ `!!join` → Join your voice channel  
-👋 `!!leave` → Leave the voice channel  
-📺 `!!watch <channel>` → Watch Malayalam TV live  
-📻 `!!radio <station>` → Listen to Malayalam FM Radio  
-📝 `!!channels` → Show all available TV channels  
-🎶 `!!stations` → Show all available FM stations  
-🎵 `!!play <song>` → Play music or add to queue  
-➕ `!!queue <song>` → Add music to the queue  
-📋 `!!showqueue` → View the current queue  
-🔁 `!!24/7` → Prevent auto-disconnect from VC  
-🕐 `!!autopilot` → Enable auto-disconnect after 5 mins  
-💡 `!!commands` → Show this help panel  
+🎙️ `!!join` → Join your voice channel
+👋 `!!leave` → Leave the voice channel
+📺 `!!watch <channel>` → Watch Malayalam TV live
+📻 `!!radio <station>` → Listen to Malayalam FM Radio
+📝 `!!channels` → Show all available TV channels
+🎶 `!!stations` → Show all available FM stations
+🎵 `!!play <song>` → Play music or add to queue
+➕ `!!queue <song>` → Add music to the queue
+📋 `!!showqueue` → View the current queue
+⏸️ `!!pause` → Pause playback
+▶️ `!!resume` → Resume playback
+⏹️ `!!stop` → Stop playback
+⏭️ `!!skip` → Skip to next in queue
+🔁 `!!persist` → Prevent auto-disconnect from VC
+🕐 `!!autopilot` → Enable auto-disconnect after 5 mins
+💡 `!!commands` → Show this help panel
 ━━━━━━━━━━━━━━━━━━━━━━
-Enjoy! 😎 Made by Sethu. FUCK **NIGGERS!! I do not associate with NIGGERS!!**
-    """
+Enjoy! 😎 Made by Sethu
+"""
     await ctx.send(help_text)
 
 keep_alive()
