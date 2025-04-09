@@ -1,4 +1,3 @@
-# main.py
 import discord
 from discord.ext import commands, tasks
 import os
@@ -6,6 +5,7 @@ from keep_alive import keep_alive
 import yt_dlp
 import asyncio
 import time
+import random
 from collections import deque
 
 intents = discord.Intents.default()
@@ -20,7 +20,16 @@ auto_disconnect_enabled = True
 idle_disconnect_delay = 300  # 5 minutes
 stream_cache = {}
 
+USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
+    "Mozilla/5.0 (X11; Linux x86_64)",
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 14_2 like Mac OS X)",
+    "Mozilla/5.0 (Windows NT 6.1; WOW64)",
+]
+
 def get_audio_url(search):
+    user_agent = random.choice(USER_AGENTS)
     ydl_opts = {
         'format': 'bestaudio/best',
         'quiet': True,
@@ -28,31 +37,40 @@ def get_audio_url(search):
         'cookiefile': 'cookies.txt',
         'default_search': 'ytsearch',
         'extract_flat': 'in_playlist',
-        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+        'user_agent': user_agent,
         'sleep_interval_requests': 2,
         'sleep_interval': 2,
         'max_sleep_interval': 4,
         'ratelimit': 512000,
         'retries': 3,
     }
+
+    try:
+        cookie_age = os.path.getmtime('cookies.txt')
+        age = time.time() - cookie_age
+        if age > 604800:  # 7 days
+            print("⚠️ Your cookies.txt is older than 7 days. You may face 403 or 429 errors.")
+    except Exception as e:
+        print(f"⚠️ Could not check cookie age: {e}")
+
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         try:
             info = ydl.extract_info(search, download=False)
             if 'entries' in info:
                 info = info['entries'][0]
-            return info['url'], info['title']
+            return info['url'], info['title'], user_agent
         except Exception as e:
             print(f"❌ Error fetching audio URL: {e}")
-            return None, "Unknown Title"
+            return None, "Unknown Title", user_agent
 
 def get_cached_audio_url(name, search):
     now = time.time()
     if name in stream_cache and now - stream_cache[name]['time'] < 300:
-        return stream_cache[name]['url'], stream_cache[name]['title']
-    url, title = get_audio_url(search)
+        return stream_cache[name]['url'], stream_cache[name]['title'], stream_cache[name]['user_agent']
+    url, title, user_agent = get_audio_url(search)
     if url:
-        stream_cache[name] = {'url': url, 'title': title, 'time': now}
-    return url, title
+        stream_cache[name] = {'url': url, 'title': title, 'time': now, 'user_agent': user_agent}
+    return url, title, user_agent
 
 @bot.event
 async def on_ready():
@@ -70,7 +88,7 @@ async def join(ctx):
         except Exception as e:
             await ctx.send(f"❌ Failed to connect: {e}")
     else:
-        await ctx.send("❌ You're not in a voice channel!")
+        await ctx.send("<:exclamation_point:872425113235128322> You're not in a voice channel!")
 
 @bot.command()
 async def leave(ctx):
@@ -88,13 +106,16 @@ async def play_next(ctx):
     if not vc or not song_queue:
         return
 
-    url, title = song_queue.popleft()
-    ffmpeg_options = {
-        "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
-        "options": "-vn"
-    }
-
+    url, title, user_agent = song_queue.popleft()
     try:
+        ffmpeg_options = {
+            "before_options": (
+                f"-headers \"User-Agent: {user_agent}\\r\\n"
+                "Cookie: " + open('cookies.txt').read().replace('\n', '') + "\\r\\n\" "
+                "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5"
+            ),
+            "options": "-vn"
+        }
         vc.play(discord.FFmpegPCMAudio(url, **ffmpeg_options),
                 after=lambda e: asyncio.run_coroutine_threadsafe(play_next(ctx), bot.loop))
         await ctx.send(f"🎶 Now playing: **{title}**")
@@ -105,7 +126,7 @@ async def play_next(ctx):
 @bot.command()
 async def play(ctx, *, song):
     global song_queue
-    url, title = get_audio_url(song)
+    url, title, user_agent = get_audio_url(song)
     if url is None:
         await ctx.send("❌ Could not fetch the song. Try again later.")
         return
@@ -123,20 +144,20 @@ async def play(ctx, *, song):
 
     vc = ctx.voice_client
     if not vc.is_playing():
-        song_queue.appendleft((url, title))
+        song_queue.appendleft((url, title, user_agent))
         await play_next(ctx)
     else:
-        song_queue.append((url, title))
+        song_queue.append((url, title, user_agent))
         await ctx.send(f"📥 Added to queue: **{title}**")
 
 @bot.command()
 async def queue(ctx, *, song):
     global song_queue
-    url, title = get_audio_url(song)
+    url, title, user_agent = get_audio_url(song)
     if url is None:
         await ctx.send("❌ Could not fetch the song. Try again later.")
         return
-    song_queue.append((url, title))
+    song_queue.append((url, title, user_agent))
     await ctx.send(f"📥 Added to queue: **{title}**")
 
 @bot.command()
@@ -144,7 +165,7 @@ async def showqueue(ctx):
     if not song_queue:
         await ctx.send("📭 The queue is empty.")
     else:
-        queue_list = "\n".join([f"{i+1}. {title}" for i, (_, title) in enumerate(song_queue)])
+        queue_list = "\n".join([f"{i+1}. {title}" for i, (_, title, _) in enumerate(song_queue)])
         await ctx.send(f"🎶 **Upcoming Songs:**\n{queue_list}")
 
 @bot.command()
@@ -218,7 +239,7 @@ async def watch(ctx, *, channel_name=None):
     if channel_name is None or channel_name.lower() not in youtube_streams:
         await ctx.send("❗ Please provide a valid channel name. Use `!!channels` to see available channels.")
         return
-    url, title = get_cached_audio_url(channel_name.lower(), youtube_streams[channel_name.lower()])
+    url, title, user_agent = get_cached_audio_url(channel_name.lower(), youtube_streams[channel_name.lower()])
     if url is None:
         await ctx.send("❌ Could not fetch stream URL. Try again later.")
         return
@@ -235,7 +256,11 @@ async def watch(ctx, *, channel_name=None):
     else:
         vc = ctx.voice_client
     ffmpeg_options = {
-        "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
+        "before_options": (
+            f"-headers \"User-Agent: {user_agent}\\r\\n"
+            "Cookie: " + open('cookies.txt').read().replace('\n', '') + "\\r\\n\" "
+            "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5"
+        ),
         "options": "-vn"
     }
     vc.stop()
@@ -257,7 +282,7 @@ async def radio(ctx, *, station=None):
     if station is None or station.lower() not in radio_stations:
         await ctx.send("❗ Please provide a valid radio station. Use `!!stations` to see the list.")
         return
-    url, title = get_cached_audio_url(station.lower(), radio_stations[station.lower()])
+    url, title, user_agent = get_cached_audio_url(station.lower(), radio_stations[station.lower()])
     if url is None:
         await ctx.send("❌ Could not fetch stream URL. Try again later.")
         return
@@ -269,12 +294,16 @@ async def radio(ctx, *, station=None):
                 await ctx.send(f"❌ Failed to connect: {e}")
                 return
         else:
-            await ctx.send("❌ You're not in a voice channel!")
+            await ctx.send("<:exclamation_point:872425113235128322> You're not in a voice channel!")
             return
     else:
         vc = ctx.voice_client
     ffmpeg_options = {
-        "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
+        "before_options": (
+            f"-headers \"User-Agent: {user_agent}\\r\\n"
+            "Cookie: " + open('cookies.txt').read().replace('\n', '') + "\\r\\n\" "
+            "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5"
+        ),
         "options": "-vn"
     }
     vc.stop()
@@ -282,7 +311,7 @@ async def radio(ctx, *, station=None):
         vc.play(discord.FFmpegPCMAudio(url, **ffmpeg_options))
         await ctx.send(f"📻 Now playing: **{station.upper()} FM**")
     except Exception as e:
-        await ctx.send(f"❌ Playback failed: {e}")
+        await ctx.send(f"<:exclamation_point:872425113235128322> Playback failed: {e}")
 
 @bot.command()
 async def channels(ctx):
