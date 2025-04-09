@@ -370,7 +370,6 @@ async def commands(ctx):
 ━━━━━━━━━━━━━━━━━━━━━━
 Made by Sethu 😎
 """)
-  await ctx.send(help_text)
 
 keep_alive()
 bot.run(os.environ["DISCORD_TOKEN"])
