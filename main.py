@@ -88,7 +88,7 @@ async def join(ctx):
         except Exception as e:
             await ctx.send(f"❌ Failed to connect: {e}")
     else:
-        await ctx.send("<:exclamation_point:872425113235128322> You're not in a voice channel!")
+        await ctx.send("<a:exclamation_point:872425113235128322> You're not in a voice channel!")
 
 @bot.command()
 async def leave(ctx):
@@ -294,7 +294,7 @@ async def radio(ctx, *, station=None):
                 await ctx.send(f"❌ Failed to connect: {e}")
                 return
         else:
-            await ctx.send("<:exclamation_point:872425113235128322> You're not in a voice channel!")
+            await ctx.send("<a:exclamation_point:872425113235128322> You're not in a voice channel!")
             return
     else:
         vc = ctx.voice_client
@@ -311,7 +311,7 @@ async def radio(ctx, *, station=None):
         vc.play(discord.FFmpegPCMAudio(url, **ffmpeg_options))
         await ctx.send(f"📻 Now playing: **{station.upper()} FM**")
     except Exception as e:
-        await ctx.send(f"<:exclamation_point:872425113235128322> Playback failed: {e}")
+        await ctx.send(f"<a:exclamation_point:872425113235128322> Playback failed: {e}")
 
 @bot.command()
 async def channels(ctx):
