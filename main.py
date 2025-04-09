@@ -8,6 +8,13 @@ import time
 import random
 from collections import deque
 import lyricsgenius
+from dotenv import load_dotenv  # Load .env variables
+
+load_dotenv()  # Activate .env loading
+
+GENIUS_TOKEN = os.getenv("GENIUS_TOKEN")
+genius = lyricsgenius.Genius(GENIUS_TOKEN)
+
 
 intents = discord.Intents.default()
 intents.message_content = True
